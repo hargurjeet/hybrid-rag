@@ -1,8 +1,16 @@
-import json
+import json, os
+import cohere
 from tqdm import tqdm
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
+from dotenv import load_dotenv
+
+load_dotenv()
+
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+
+co = cohere.Client(COHERE_API_KEY)
 
 def load_arxiv_documents(file_path):
     """Parse JSONL arXiv dataset and convert into LangChain Documents"""
@@ -134,4 +142,48 @@ def hybrid_retrieve_documents(query, collection, model, top_k=5, alpha=0.5):
     return results
 
 
+def rerank_with_cohere(query, retrieved_docs, top_k=5):
+    """
+    Rerank retrieved documents using Cohere's rerank model.
 
+    Parameters
+    ----------
+    query : str
+        User search query
+    retrieved_docs : list
+        Documents returned from retriever
+    top_k : int
+        Number of final results to return
+
+    Returns
+    -------
+    list
+        Reranked documents
+    """
+
+    if not retrieved_docs:
+        return []
+
+    documents = [doc["text"] for doc in retrieved_docs]
+
+    response = co.rerank(
+        model="rerank-english-v3.0",
+        query=query,
+        documents=documents,
+        top_n=top_k
+    )
+
+    reranked_results = []
+
+    for result in response.results:
+        original_doc = retrieved_docs[result.index]
+
+        reranked_results.append({
+            "paper_id": original_doc["paper_id"],
+            "title": original_doc["title"],
+            "categories": original_doc["categories"],
+            "text": original_doc["text"],
+            "score": result.relevance_score
+        })
+
+    return reranked_results

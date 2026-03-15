@@ -4,7 +4,7 @@ from weaviate.classes.init import Auth
 from weaviate.classes.config import Property, DataType
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
-from utils import load_arxiv_documents, chunk_documents, upload_chunks, retrieve_documents, hybrid_retrieve_documents
+from utils import load_arxiv_documents, chunk_documents, upload_chunks, retrieve_documents, hybrid_retrieve_documents, rerank_with_cohere
 
 load_dotenv()
 
@@ -16,6 +16,7 @@ model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 # Best practice: store your credentials in environment variables
 weaviate_url = os.getenv("WEAVIATE_URL")
 weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
 with weaviate.connect_to_weaviate_cloud(
     cluster_url=weaviate_url,
@@ -72,21 +73,21 @@ with weaviate.connect_to_weaviate_cloud(
             break
 
         # results = retrieve_documents(query, collection, model, top_k=10)
-        results = hybrid_retrieve_documents(
+        retrieved_docs = hybrid_retrieve_documents(
                                             query=query,
                                             collection=collection,
                                             model=model,
-                                            top_k=5,
-                                            alpha=0.5
+                                            top_k=20
                                             )
+        
+        reranked_docs = rerank_with_cohere(query, retrieved_docs, top_k=5)
 
-        print("\nTop retrieved documents:\n")
+        print("\nFinal Reranked Results:\n")
 
-        for i, doc in enumerate(results):
-
-            print(f"Result {i+1}")
+        for i, doc in enumerate(reranked_docs):
+            print(f"Rank {i+1}")
             print("Paper ID:", doc["paper_id"])
             print("Category:", doc["categories"])
-            print("Similarity Score:", doc["score"])
-            print("Text snippet:", doc["text"][:300])
+            print("Relevance Score:", doc["score"])
+            print("Text:", doc["text"][:300])
             print("-" * 50)
