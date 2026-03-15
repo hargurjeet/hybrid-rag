@@ -2,7 +2,7 @@ import json
 from tqdm import tqdm
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-
+from sentence_transformers import SentenceTransformer
 
 def load_arxiv_documents(file_path):
     """Parse JSONL arXiv dataset and convert into LangChain Documents"""
@@ -62,4 +62,43 @@ def upload_chunks(chunks, collection, model):
             )
 
     print("Upload complete")
+
+def embed_query(query: str, model: SentenceTransformer):
+    """
+    Convert query text into embedding vector
+    """
+    return model.encode(query).tolist()
+
+def retrieve_documents(query, collection, model, top_k=5):
+    """
+    Retrieve similar documents from Weaviate using vector search
+    """
+
+    query_vector = embed_query(query, model)
+
+    response = collection.query.near_vector(
+        near_vector=query_vector,
+        limit=top_k,
+        return_properties=["paper_id", "title", "categories", "chunk_text"],
+        return_metadata=["distance"]
+    )
+
+    results = []
+
+    for obj in response.objects:
+        distance = obj.metadata.distance
+        score = 1 - distance if distance is not None else None
+
+        results.append(
+            {
+                "paper_id": obj.properties["paper_id"],
+                "title": obj.properties["title"],
+                "categories": obj.properties["categories"],
+                "text": obj.properties["chunk_text"],
+                "score": score,
+                "distance": distance
+            }
+        )
+
+    return results
 
