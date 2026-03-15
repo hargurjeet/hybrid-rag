@@ -187,3 +187,45 @@ def rerank_with_cohere(query, retrieved_docs, top_k=5):
         })
 
     return reranked_results
+
+import ollama
+
+def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
+    """
+    Generate final answer using Llama 3.2 via Ollama
+    """
+
+    context_blocks = []
+
+    for i, doc in enumerate(reranked_docs):
+        context_blocks.append(
+            f"[Document {i+1}]\n{doc['text']}"
+        )
+
+    context = "\n\n".join(context_blocks)
+
+    prompt = f"""
+
+    You are a research assistant.
+
+    Use ONLY the information provided in the context to answer the question.
+    If the answer cannot be found, say "I don't know based on the provided documents."
+
+    Context:
+    {context}
+
+    Question:
+    {query}
+
+    Answer:
+    """
+
+
+    response = ollama.chat(
+        model=model_name,
+        messages=[
+            {"role": "user", "content": prompt}
+        ]
+    )
+
+    return response["message"]["content"]
