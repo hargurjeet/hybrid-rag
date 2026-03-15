@@ -199,17 +199,21 @@ def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
 
     for i, doc in enumerate(reranked_docs):
         context_blocks.append(
-            f"[Document {i+1}]\n{doc['text']}"
+            f"[Document {i+1} | arXiv:{doc['paper_id']}]\n{doc['text']}"
         )
 
     context = "\n\n".join(context_blocks)
 
     prompt = f"""
-
     You are a research assistant.
 
-    Use ONLY the information provided in the context to answer the question.
-    If the answer cannot be found, say "I don't know based on the provided documents."
+    Answer the question using ONLY the context documents.
+
+    When using information from a document,
+    cite it using [Document X].
+
+    Example citation:
+    The transformer model uses self-attention [Document 2].
 
     Context:
     {context}

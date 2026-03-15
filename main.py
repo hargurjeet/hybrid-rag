@@ -99,3 +99,8 @@ with weaviate.connect_to_weaviate_cloud(
 
         print("\nFinal Answer:\n")
         print(answer)
+        print("\nSources:\n")
+
+        for i, doc in enumerate(reranked_docs):
+
+            print(f"[Document {i+1}] arXiv:{doc['paper_id']}")
