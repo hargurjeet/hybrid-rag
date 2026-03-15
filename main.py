@@ -4,7 +4,7 @@ from weaviate.classes.init import Auth
 from weaviate.classes.config import Property, DataType
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
-from utils import load_arxiv_documents, chunk_documents, upload_chunks, retrieve_documents
+from utils import load_arxiv_documents, chunk_documents, upload_chunks, retrieve_documents, hybrid_retrieve_documents
 
 load_dotenv()
 
@@ -71,7 +71,14 @@ with weaviate.connect_to_weaviate_cloud(
         if query == "exit":
             break
 
-        results = retrieve_documents(query, collection, model, top_k=10)
+        # results = retrieve_documents(query, collection, model, top_k=10)
+        results = hybrid_retrieve_documents(
+                                            query=query,
+                                            collection=collection,
+                                            model=model,
+                                            top_k=5,
+                                            alpha=0.5
+                                            )
 
         print("\nTop retrieved documents:\n")
 

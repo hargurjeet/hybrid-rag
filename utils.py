@@ -102,3 +102,36 @@ def retrieve_documents(query, collection, model, top_k=5):
 
     return results
 
+def hybrid_retrieve_documents(query, collection, model, top_k=5, alpha=0.5):
+    """
+    Hybrid retrieval using BM25 + Vector similarity
+    """
+
+    query_vector = model.encode(query).tolist()
+
+    response = collection.query.hybrid(
+        query=query,
+        vector=query_vector,
+        alpha=alpha,
+        limit=top_k,
+        return_properties=["paper_id", "title", "categories", "chunk_text"],
+        return_metadata=["score"]
+    )
+
+    results = []
+
+    for obj in response.objects:
+        results.append(
+            {
+                "paper_id": obj.properties["paper_id"],
+                "title": obj.properties["title"],
+                "categories": obj.properties["categories"],
+                "text": obj.properties["chunk_text"],
+                "score": obj.metadata.score
+            }
+        )
+
+    return results
+
+
+
