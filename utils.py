@@ -5,6 +5,7 @@ from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
+import ollama
 
 load_dotenv()
 
@@ -188,7 +189,7 @@ def rerank_with_cohere(query, retrieved_docs, top_k=5):
 
     return reranked_results
 
-import ollama
+
 
 def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
     """
@@ -232,4 +233,22 @@ def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
         ]
     )
 
-    return response["message"]["content"]
+    answer = response["message"]["content"]
+    return answer
+
+def rerank_local(query, retrieved_docs, reranker_model, top_k=5):
+
+    pairs = [(query, doc["text"]) for doc in retrieved_docs]
+
+    scores = reranker_model.predict(pairs)
+
+    for doc, score in zip(retrieved_docs, scores):
+        doc["score"] = float(score)
+
+    ranked_docs = sorted(
+        retrieved_docs,
+        key=lambda x: x["score"],
+        reverse=True
+    )
+
+    return ranked_docs[:top_k]

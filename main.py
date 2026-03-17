@@ -58,6 +58,7 @@ with weaviate.connect_to_weaviate_cloud(
 
     else:
         print(f"Collection '{COLLECTION_NAME}' already exists. Skipping ingestion.")
+        
 
 
     # Always get collection
@@ -69,7 +70,7 @@ with weaviate.connect_to_weaviate_cloud(
     while True:
         query = input("\nAsk something (or type exit): ")
 
-        if query == "exit":
+        if query.lower() == "exit":
             break
 
         # results = retrieve_documents(query, collection, model, top_k=10)
@@ -104,3 +105,5 @@ with weaviate.connect_to_weaviate_cloud(
         for i, doc in enumerate(reranked_docs):
 
             print(f"[Document {i+1}] arXiv:{doc['paper_id']}")
+
+    

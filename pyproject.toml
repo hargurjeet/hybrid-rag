@@ -6,13 +6,16 @@ readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
     "cohere>=5.20.7",
+    "datasets>=4.7.0",
     "kaggle>=2.0.0",
     "kagglehub>=1.0.0",
     "langchain>=1.2.12",
     "langchain-core>=1.2.19",
     "langchain-text-splitters>=1.1.1",
     "ollama>=0.6.1",
+    "pandas>=3.0.1",
     "python-dotenv>=1.2.2",
+    "ragas>=0.4.3",
     "sentence-transformers>=5.3.0",
     "tqdm>=4.67.3",
     "weaviate>=0.1.2",
