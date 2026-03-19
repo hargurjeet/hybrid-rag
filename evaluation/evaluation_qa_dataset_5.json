@@ -1,0 +1,38 @@
+[
+  {
+    "question": "What energy levels are considered in the diphoton production calculation?",
+    "ground_truth": "The calculation considers Tevatron and LHC (Large Hadron Collider) energies.",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "question": "Which subprocesses are included in the next-to-leading order perturbative contributions for diphoton production?",
+    "ground_truth": "The next-to-leading order perturbative contributions include quark-antiquark, gluon-(anti)quark, and gluon-gluon subprocesses.",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "question": "What equation governs Alfvenic fluctuations in the inertial range?",
+    "ground_truth": "Alfvenic fluctuations are governed by the RMHD equations at both the collisional and collisionless scales.",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "question": "What bottom friction model is used in the shallow-water flows study?",
+    "ground_truth": "The bottom friction is modeled by the Chezy law.",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "question": "What method is used to study the propagation of shallow-water waves over a gradual slope?",
+    "ground_truth": "The Whitham averaging method is used, specifically a recent development of this theory for perturbed integrable equations.",
+    "contexts": [],
+    "answer": ""
+  },
+  {
+    "question": "What does the conjecture by Diosi, Feldmann and Kosloff concern?",
+    "ground_truth": "The conjecture states that the limit of the entropy of certain mixtures is the relative entropy as system size goes to infinity.",
+    "contexts": [],
+    "answer": ""
+  }
+]

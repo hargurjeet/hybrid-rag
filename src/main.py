@@ -4,7 +4,7 @@ from weaviate.classes.init import Auth
 from weaviate.classes.config import Property, DataType
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
-from utils import load_arxiv_documents, chunk_documents, upload_chunks, retrieve_documents, hybrid_retrieve_documents, rerank_with_cohere, generate_answer_with_llama
+from src.utils import load_arxiv_documents, chunk_documents, upload_chunks, retrieve_documents, hybrid_retrieve_documents, rerank_with_cohere, generate_answer_with_llama
 
 load_dotenv()
 
