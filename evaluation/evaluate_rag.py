@@ -28,7 +28,7 @@ load_dotenv()
 weaviate_url = os.getenv("WEAVIATE_URL")
 weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
 COLLECTION_NAME = "ArxivPapers"
-FAITHFULNESS_THRESHOLD = 0.4
+FAITHFULNESS_THRESHOLD = 0.3
 RELEVANCY_THRESHOLD = 0.75
 
 
