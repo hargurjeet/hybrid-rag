@@ -27,6 +27,13 @@ jobs:
           pip install uv
           uv sync
 
+      - name: Debug Python environment
+        run: |
+          which python
+          python --version
+          pip --version
+          pip list
+
       - name: Run evaluation
         run: |
-          python evaluation/evaluate_rag.py
+          uv run python evaluation/evaluate_rag.py
