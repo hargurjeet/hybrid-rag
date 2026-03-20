@@ -9,6 +9,7 @@ on:
 env:
   WEAVIATE_URL: ${{ secrets.WEAVIATE_URL }}
   WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
+  CO_API_KEY: ${{ secrets.CO_API_KEY }}
 jobs:
   rag-eval:
     runs-on: ubuntu-latest

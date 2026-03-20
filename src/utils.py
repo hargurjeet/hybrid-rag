@@ -10,6 +10,8 @@ import ollama
 load_dotenv()
 
 CO_API_KEY = os.getenv("CO_API_KEY")
+if not CO_API_KEY:
+    raise ValueError("CO_API_KEY is not set in environment variables")
 
 co = cohere.Client(CO_API_KEY)
 
