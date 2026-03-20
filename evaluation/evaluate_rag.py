@@ -35,7 +35,8 @@ RELEVANCY_THRESHOLD = 0.75
 # Setup local Mixtral judge model via Ollama
 judge_llm = Ollama(
     model="phi3:mini",
-    temperature=0
+    temperature=0,
+    timeout=300 # Increase to 5 minutes
 )
 
 ragas_llm = LangchainLLMWrapper(judge_llm)
@@ -105,10 +106,11 @@ result = evaluate(
         faithfulness
     ],
     llm=ragas_llm,
-    embeddings=embedding_model
+    embeddings=embedding_model,
+    run_config={"max_workers": 1, "timeout": 180} # Force sequential processing
 )
 
-print(result)
+print(f'result: {result}')
 
 result_df = result.to_pandas()
 result_df.to_csv("rag_evaluation_results.csv", index=False)
@@ -119,12 +121,17 @@ print(f"Value: {faithfulness_score} | Type: {type(faithfulness_score)}")
 
 avg_score = np.nanmean(faithfulness_score)
 
+print(f"Average Faithfulness Score: {avg_score}")
+
 if avg_score < FAITHFULNESS_THRESHOLD:
     print("❌ Faithfulness below threshold")
+    print("❌ Evaluation failed")
     sys.exit(1)
+else:
+    print("✅ Faithfulness above threshold")
+    print("✅ Evaluation passed")
 
 # if relevancy_score < RELEVANCY_THRESHOLD:
 #     print("❌ Answer relevancy below threshold")
 #     sys.exit(1)
 
-print("✅ Evaluation passed")

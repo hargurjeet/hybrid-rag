@@ -43,6 +43,9 @@ jobs:
       - name: Pull models
         run: |
           ollama pull phi3:mini
+          # Run a dummy prompt to ensure the model is loaded in memory
+          ollama run phi3:mini "hi"
+          
           ollama pull llama3.2
 
       - name: Debug Python environment
