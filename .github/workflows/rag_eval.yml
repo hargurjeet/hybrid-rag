@@ -7,8 +7,8 @@ on:
     branches: [ main ]
     
 env:
-          WEAVIATE_URL: ${{ secrets.WEAVIATE_URL }}
-          WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
+  WEAVIATE_URL: ${{ secrets.WEAVIATE_URL }}
+  WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
 jobs:
   rag-eval:
     runs-on: ubuntu-latest
@@ -22,10 +22,13 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Clean old venv
+        run: rm -rf .venv
+
       - name: Install dependencies
         run: |
           pip install uv
-          uv sync
+          uv sync --python 3.11
 
       - name: Install Ollama
         run: |
