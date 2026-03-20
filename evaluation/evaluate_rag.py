@@ -18,6 +18,7 @@ from datasets import Dataset
 
 from langchain_community.llms import Ollama
 from ragas.llms import LangchainLLMWrapper
+from ragas.run_config import RunConfig
 # from ragas.embeddings import HuggingFaceEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
@@ -31,6 +32,11 @@ COLLECTION_NAME = "ArxivPapers"
 FAITHFULNESS_THRESHOLD = 0.3
 RELEVANCY_THRESHOLD = 0.75
 
+# Create the config object instead of a dictionary
+evaluation_config = RunConfig(
+    max_workers=1, 
+    timeout=300
+)
 
 # Setup local Mixtral judge model via Ollama
 judge_llm = Ollama(
@@ -107,7 +113,7 @@ result = evaluate(
     ],
     llm=ragas_llm,
     embeddings=embedding_model,
-    run_config={"max_workers": 1, "timeout": 180} # Force sequential processing
+    run_config=evaluation_config # Force sequential processing
 )
 
 print(f'result: {result}')
