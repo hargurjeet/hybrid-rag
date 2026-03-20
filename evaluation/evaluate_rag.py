@@ -35,7 +35,7 @@ RELEVANCY_THRESHOLD = 0.75
 # Create the config object instead of a dictionary
 evaluation_config = RunConfig(
     max_workers=1, 
-    timeout=300
+    timeout=180
 )
 
 # Setup local Mixtral judge model via Ollama
