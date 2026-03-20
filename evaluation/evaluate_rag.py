@@ -10,7 +10,7 @@ from weaviate.classes.init import Auth
 from sentence_transformers import SentenceTransformer, CrossEncoder
 from dotenv import load_dotenv
 
-from src.utils import hybrid_retrieve_documents, rerank_with_cohere, generate_answer_with_llama, rerank_local
+from src.utils import hybrid_retrieve_documents, generate_answer_with_llama, rerank_local
 
 from ragas.metrics import faithfulness, answer_relevancy
 from ragas import evaluate
