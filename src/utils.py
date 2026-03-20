@@ -9,9 +9,9 @@ import ollama
 
 load_dotenv()
 
-COHERE_API_KEY = os.getenv("COHERE_API_KEY")
+CO_API_KEY = os.getenv("CO_API_KEY")
 
-co = cohere.Client(COHERE_API_KEY)
+co = cohere.Client(CO_API_KEY)
 
 def load_arxiv_documents(file_path):
     """Parse JSONL arXiv dataset and convert into LangChain Documents"""
