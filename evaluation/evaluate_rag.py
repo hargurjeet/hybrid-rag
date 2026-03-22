@@ -31,6 +31,7 @@ weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
 COLLECTION_NAME = "ArxivPapers"
 FAITHFULNESS_THRESHOLD = 0.3
 RELEVANCY_THRESHOLD = 0.75
+USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
 
 # Create the config object instead of a dictionary
 evaluation_config = RunConfig(
@@ -38,12 +39,53 @@ evaluation_config = RunConfig(
     timeout=180
 )
 
-# Setup local Mixtral judge model via Ollama
-judge_llm = Ollama(
-    model="phi3:mini",
-    temperature=0,
-    timeout=300 # Increase to 5 minutes
-)
+# ============================================
+# SMART LLM SELECTION FOR EVALUATION
+# Automatically matches your main pipeline configuration
+# ============================================
+ 
+USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
+USE_HF_INFERENCE = os.getenv("USE_HF_INFERENCE", "false").lower() == "true"
+
+if USE_GROQ:
+    # Cloud evaluation with Groq (more reliable, better structured output)
+    print("🌩️  Using Groq for evaluation (cloud)")
+    
+    from langchain_groq import ChatGroq
+    
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY required when USE_GROQ=true")
+    
+    # Use same model as main pipeline or specify evaluation model
+    GROQ_EVAL_MODEL = os.getenv("GROQ_EVAL_MODEL", os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"))
+    
+    judge_llm = ChatGroq(
+        model=GROQ_EVAL_MODEL,
+        temperature=0,
+        groq_api_key=GROQ_API_KEY,
+        max_tokens=2048
+    )
+    
+    print(f"   Model: {GROQ_EVAL_MODEL}")
+else:
+    # Local evaluation with Ollama
+    print("🏠 Using Ollama for evaluation (local)")
+    
+    # Use different models based on what's available
+    # Priority: llama3.2 > llama3.1 > phi3:mini
+    OLLAMA_EVAL_MODEL = os.getenv("OLLAMA_EVAL_MODEL", "phi3:mini")
+    
+    judge_llm = Ollama(
+        model=OLLAMA_EVAL_MODEL,
+        temperature=0,
+        timeout=300
+    )
+    
+    print(f"   Model: {OLLAMA_EVAL_MODEL}")
+    print(f"   💡 Tip: For better results, use llama3.2 or llama3.1:")
+    print(f"      ollama pull llama3.2")
+    print(f"      export OLLAMA_EVAL_MODEL=llama3.2")
 
 ragas_llm = LangchainLLMWrapper(judge_llm)
 reranker_model = CrossEncoder("BAAI/bge-reranker-large")
@@ -106,11 +148,14 @@ df["answer"] = answers_list
 dataset = Dataset.from_pandas(df)
 
 # Run evaluation
+print("\n" + "="*60)
+print("Starting RAGAS Evaluation...")
+print("="*60 + "\n")
+
+# Run evaluation
 result = evaluate(
     dataset,
-    metrics=[
-        faithfulness
-    ],
+    metrics=[faithfulness],
     llm=ragas_llm,
     embeddings=embedding_model,
     run_config=evaluation_config # Force sequential processing

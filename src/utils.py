@@ -15,6 +15,47 @@ if not CO_API_KEY:
 
 co = cohere.Client(CO_API_KEY)
 
+# ============================================
+# NEW: LLM Configuration
+# ============================================
+USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
+USE_HF_INFERENCE = os.getenv("USE_HF_INFERENCE", "false").lower() == "true"
+
+
+# Groq Setup (RECOMMENDED for cloud deployment)
+if USE_GROQ:
+    from groq import Groq
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY required when USE_GROQ=true. Get free key from https://console.groq.com")
+    
+    groq_client = Groq(api_key=GROQ_API_KEY)
+    # Available models: llama-3.1-70b-versatile, mixtral-8x7b-32768, gemma-7b-it
+    GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-70b-versatile")
+    print(f"Using Groq API with model: {GROQ_MODEL}")
+
+# Only import HF client if needed
+elif USE_HF_INFERENCE:
+    from huggingface_hub import InferenceClient
+    HF_TOKEN = os.getenv("HF_TOKEN")
+    if not HF_TOKEN:
+        raise ValueError("HF_TOKEN required when USE_HF_INFERENCE=true")
+    
+    # Model options (choose one):
+    # Option 1: Mistral (good quality, may have rate limits)
+    # Option 2: Zephyr (smaller, faster, more reliable on free tier)
+    # Option 3: Llama-2 (good quality, stable)
+    HF_MODEL = os.getenv("HF_MODEL", "HuggingFaceH4/zephyr-7b-beta")
+    
+    hf_client = InferenceClient(
+        model=HF_MODEL,
+        token=HF_TOKEN
+    )
+    print(f"Using HuggingFace Inference API with model: {HF_MODEL}")
+else:
+
+    print("Using Ollama (local)")
+
 def load_arxiv_documents(file_path):
     """Parse JSONL arXiv dataset and convert into LangChain Documents"""
 
@@ -191,11 +232,21 @@ def rerank_with_cohere(query, retrieved_docs, top_k=5):
 
     return reranked_results
 
-
+# ============================================
+# MODIFIED: LLM Answer Generation with Toggle
+# ============================================
 
 def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
     """
-    Generate final answer using Llama 3.2 via Ollama
+    Generate final answer using one of three backends:
+    1. Groq API (USE_GROQ=true) - RECOMMENDED for cloud, free & fast
+    2. HuggingFace Inference API (USE_HF_INFERENCE=true) - limited free tier
+    3. Ollama (default) - for local development
+    
+    Configure via environment variables:
+    - USE_GROQ=true + GROQ_API_KEY → Groq
+    - USE_HF_INFERENCE=true + HF_TOKEN → HuggingFace
+    - Both false → Ollama (local)
     """
 
     context_blocks = []
@@ -227,13 +278,52 @@ def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
     Answer:
     """
 
-
-    response = ollama.chat(
-        model=model_name,
-        messages=[
-            {"role": "user", "content": prompt}
-        ]
-    )
+    # Choose LLM backend based on configuration
+    if USE_GROQ:
+        # Groq API - RECOMMENDED for cloud deployment
+        # Free, fast (fastest inference in the world), reliable
+        try:
+            response = groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=512,
+                top_p=0.95
+            )
+            return response.choices[0].message.content
+        except Exception as e:
+            print(f"Groq API error: {e}")
+            return f"Error generating answer with Groq: {str(e)}"
+        
+    # Choose LLM based on configuration
+    elif USE_HF_INFERENCE:
+        # HuggingFace Inference API
+        try:
+            # Use chat completion for instruction-tuned models
+            response = hf_client.chat_completion(
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=512,
+                temperature=0.7,
+                top_p=0.95
+            )
+            # Extract the message content
+            answer = response.choices[0].message.content
+            return answer
+        except Exception as e:
+            print(f"HF Inference error: {e}")
+            return f"Error generating answer: {str(e)}"
+    else:
+        # Ollama (local)
+        response = ollama.chat(
+            model=model_name,
+            messages=[
+                {"role": "user", "content": prompt}
+            ]
+        )
 
     answer = response["message"]["content"]
     return answer

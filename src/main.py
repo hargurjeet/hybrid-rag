@@ -1,4 +1,5 @@
-import os
+import os, sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import weaviate
 from weaviate.classes.init import Auth
 from weaviate.classes.config import Property, DataType
