@@ -1,3 +1,5 @@
+import os
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 import streamlit as st
 from pipeline import run_pipeline
 from components import render_sidebar, render_documents, render_answer
