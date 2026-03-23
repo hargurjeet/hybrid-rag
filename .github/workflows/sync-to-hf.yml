@@ -1,0 +1,19 @@
+name: Sync to Hugging Face hub
+
+on:
+  push:
+    branches: [main] # Triggers on push to the main branch
+  workflow_dispatch: # Allows manual triggering from the GitHub Actions tab
+
+jobs:
+  sync-to-hub:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          lfs: true # Important for handling large files (>10MB)
+      - name: Push to hub
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }} # Uses the secret you created
+        run: git push https://huggingface.co/spaces/Hargurjeet/hybrid_rag_hf main
