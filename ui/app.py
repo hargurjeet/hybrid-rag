@@ -22,7 +22,7 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("🧠 Research Assistant (Production RAG)")
+st.title("🧠 Research Assistant (Production HYBRID RAG)")
 
 with st.expander("ℹ️ About this Project"):
 
