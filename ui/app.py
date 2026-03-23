@@ -34,11 +34,12 @@ with tab1:
         "Explain the Chezy law"
     ]
 
-    cols = st.columns(3)
+    cols = st.columns(3, gap="medium")
 
     for i, question in enumerate(sample_questions):
-        if cols[i].button(question):
-            st.session_state.query = question
+        with cols[i]:
+            if st.button(question, use_container_width=True):
+                st.session_state.query = question
 
     config = render_sidebar()
 
