@@ -13,7 +13,11 @@ jobs:
         with:
           fetch-depth: 0
           lfs: true # Important for handling large files (>10MB)
-      - name: Push to hub
+      
+      - name: Push to Hugging Face Space
         env:
-          HF_TOKEN: ${{ secrets.HF_TOKEN }} # Uses the secret you created
-        run: git push https://huggingface.co/spaces/Hargurjeet/hybrid_rag_hf main
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "gurjeet333@gmail.com"
+          git config --global user.name "hargurjeet"
+          git push https://Hargurjeet:${HF_TOKEN}@huggingface.co/spaces/Hargurjeet/hybrid_rag_hf main
