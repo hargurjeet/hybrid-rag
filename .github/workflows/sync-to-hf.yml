@@ -14,10 +14,22 @@ jobs:
           fetch-depth: 0
           lfs: true # Important for handling large files (>10MB)
       
-      - name: Push to Hugging Face Space
+      - name: Sync with Hugging Face Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
+          # Configure Git
           git config --global user.email "gurjeet333@gmail.com"
           git config --global user.name "hargurjeet"
-          git push https://Hargurjeet:${HF_TOKEN}@huggingface.co/spaces/Hargurjeet/hybrid_rag_hf main
+          
+          # Add Hugging Face as remote
+          git remote add hf https://Hargurjeet:${HF_TOKEN}@huggingface.co/spaces/Hargurjeet/hybrid_rag_hf
+          
+          # Fetch the remote files
+          git fetch hf
+          
+          # Merge the remote files with local files (allow unrelated histories)
+          git merge hf/main --allow-unrelated-histories --no-edit
+          
+          # Push the merged result back
+          git push hf main
