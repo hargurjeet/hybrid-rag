@@ -22,6 +22,50 @@ st.set_page_config(
 
 st.title("🧠 Research Assistant (Production RAG)")
 
+with st.expander("ℹ️ About this Project"):
+
+    st.markdown("""
+### 📚 Data Source
+- Dataset sourced from **Kaggle – Cornell University arXiv dataset**
+- Due to large dataset size, a **subset of ~50 research papers** was selected
+
+---
+
+### ⚙️ Processing & Retrieval
+- Papers are **chunked using recursive text splitting**
+- Stored in a **vector database (Weaviate)**
+- Retrieval uses:
+  - 🔹 Hybrid Search (BM25 + Vector)
+  - 🔹 Reranking (Cohere)
+
+---
+
+### 🧠 LLM Strategy (Cost-Optimized)
+- Local inference using:
+  - **Ollama**
+  - Models: `llama3.2`, `phi3:mini`
+- Used for:
+  - Development
+  - Offline experimentation
+
+---
+
+### ⚡ Production Inference
+- Integrated **Groq API** for fast inference
+- Reason:
+  - Local models not viable on free-tier hosting (e.g., Hugging Face Spaces)
+  - Groq provides **low-latency, high-performance inference**
+
+---
+
+### 🎯 Goal of This Project
+To build a **production-grade RAG system** with:
+- Hybrid retrieval
+- Reranking
+- Evaluation (RAGAS)
+- Observability via UI
+""")
+
 tab1, tab2 = st.tabs(["🔍 Ask Questions", "📊 Evaluation"])
 
 with tab1:
