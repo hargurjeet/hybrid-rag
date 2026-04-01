@@ -1,4 +1,5 @@
 import json, os
+from urllib import response
 import cohere
 from tqdm import tqdm
 from langchain_core.documents import Document
@@ -6,8 +7,11 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 import ollama
+from langfuse import observe
+from langfuse import get_client
 
 load_dotenv()
+langfuse_client = get_client()
 
 CO_API_KEY = os.getenv("CO_API_KEY")
 if not CO_API_KEY:
@@ -96,22 +100,53 @@ def chunk_documents(documents):
 
     return chunks
 
-def upload_chunks(chunks, collection, model):
+# def upload_chunks(chunks, collection, model):
 
-    with collection.batch.dynamic() as batch:
+#     with collection.batch.dynamic() as batch:
 
-        for chunk in tqdm(chunks):
+#         for chunk in tqdm(chunks):
 
-            vector = model.encode(chunk.page_content).tolist()
+#             vector = model.encode(chunk.page_content).tolist()
 
-            batch.add_object(
-                properties={
-                    "paper_id": chunk.metadata["paper_id"],
-                    "categories": chunk.metadata["categories"],
-                    "chunk_text": chunk.page_content
-                },
-                vector=vector
-            )
+#             batch.add_object(
+#                 properties={
+#                     "paper_id": chunk.metadata["paper_id"],
+#                     "categories": chunk.metadata["categories"],
+#                     "chunk_text": chunk.page_content
+#                 },
+#                 vector=vector
+#             )
+
+#     print("Upload complete")
+
+def upload_chunks_chroma(chunks, collection, model, batch_size=1000):
+
+    from tqdm import tqdm
+
+    for i in tqdm(range(0, len(chunks), batch_size)):
+        batch = chunks[i:i + batch_size]
+
+        texts = [chunk.page_content for chunk in batch]
+        ids = [str(i + j) for j in range(len(batch))]
+
+        embeddings = model.encode(texts).tolist()
+
+        metadatas = []
+        for chunk in batch:
+            meta = chunk.metadata or {}
+
+            metadatas.append({
+                "paper_id": str(meta.get("paper_id", "")),
+                "categories": ", ".join(meta.get("categories", [])) if isinstance(meta.get("categories"), list) else str(meta.get("categories", "")),
+                "title": str(meta.get("title", "")),
+            })
+
+        collection.add(
+            documents=texts,
+            embeddings=embeddings,
+            ids=ids,
+            metadatas=metadatas
+        )
 
     print("Upload complete")
 
@@ -154,36 +189,66 @@ def retrieve_documents(query, collection, model, top_k=5):
 
     return results
 
-def hybrid_retrieve_documents(query, collection, model, top_k=5, alpha=0.5):
-    """
-    Hybrid retrieval using BM25 + Vector similarity
-    """
 
-    query_vector = model.encode(query).tolist()
+# @observe() # This creates a trace for the retrieval step
+# def hybrid_retrieve_documents(query, collection, model, top_k=5, alpha=0.5):
+#     """
+#     Hybrid retrieval using BM25 + Vector similarity
+#     """
 
-    response = collection.query.hybrid(
-        query=query,
-        vector=query_vector,
-        alpha=alpha,
-        limit=top_k,
-        return_properties=["paper_id", "title", "categories", "chunk_text"],
-        return_metadata=["score"]
+#     query_vector = model.encode(query).tolist()
+
+#     response = collection.query.hybrid(
+#         query=query,
+#         vector=query_vector,
+#         alpha=alpha,
+#         limit=top_k,
+#         return_properties=["paper_id", "title", "categories", "chunk_text"],
+#         return_metadata=["score"]
+#     )
+
+#     results = []
+
+#     for obj in response.objects:
+#         results.append(
+#             {
+#                 "paper_id": obj.properties["paper_id"],
+#                 "title": obj.properties["title"],
+#                 "categories": obj.properties["categories"],
+#                 "text": obj.properties["chunk_text"],
+#                 "score": obj.metadata.score
+#             }
+#         )
+
+#     return results
+
+
+@observe()
+def retrieve_chroma(query, collection, model, top_k=5):
+
+    query_embedding = model.encode(query).tolist()
+
+    results = collection.query(
+        query_embeddings=[query_embedding],
+        n_results=top_k
     )
 
-    results = []
+    if not results["documents"] or len(results["documents"][0]) == 0:
+        return []
 
-    for obj in response.objects:
-        results.append(
-            {
-                "paper_id": obj.properties["paper_id"],
-                "title": obj.properties["title"],
-                "categories": obj.properties["categories"],
-                "text": obj.properties["chunk_text"],
-                "score": obj.metadata.score
-            }
-        )
+    docs = []
 
-    return results
+    for i in range(len(results["documents"][0])):
+        meta = results["metadatas"][0][i] or {}
+
+        docs.append({
+            "text": results["documents"][0][i],
+            "paper_id": meta.get("paper_id"),
+            "categories": meta.get("categories"),
+            "title": meta.get("title"),
+        })
+
+    return docs
 
 
 def rerank_with_cohere(query, retrieved_docs, top_k=5):
@@ -235,7 +300,7 @@ def rerank_with_cohere(query, retrieved_docs, top_k=5):
 # ============================================
 # MODIFIED: LLM Answer Generation with Toggle
 # ============================================
-
+@observe(as_type="generation") # Specialized type for LLM calls
 def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
     """
     Generate final answer using one of three backends:
@@ -292,7 +357,20 @@ def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
                 max_tokens=512,
                 top_p=0.95
             )
-            return response.choices[0].message.content
+
+            answer = response.choices[0].message.content
+
+            # TRACK TOKENS FOR GROQ
+
+            langfuse_client.update_current_generation(
+                usage_details={
+                    "input": response.usage.prompt_tokens,
+                    "output": response.usage.completion_tokens,
+                    "total": response.usage.total_tokens,
+                    "unit": "TOKENS"
+                }
+                            )
+            return answer
         except Exception as e:
             print(f"Groq API error: {e}")
             return f"Error generating answer with Groq: {str(e)}"
@@ -312,6 +390,13 @@ def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
             )
             # Extract the message content
             answer = response.choices[0].message.content
+
+            langfuse_client.update_current_generation(
+            usage_details={
+                "input": response.usage.prompt_tokens,
+                "output": response.usage.completion_tokens
+                }
+            )
             return answer
         except Exception as e:
             print(f"HF Inference error: {e}")
@@ -325,9 +410,25 @@ def generate_answer_with_llama(query, reranked_docs, model_name="llama3.2"):
             ]
         )
 
-    answer = response["message"]["content"]
-    return answer
+        answer = response.message.content
 
+        # TRACK TOKENS FOR OLLAMA 
+        # Ollama provides these in the response dictionary
+        input_tokens = getattr(response, "prompt_eval_count", 0)
+        output_tokens = getattr(response, "eval_count", 0)
+
+        langfuse_client.update_current_generation(
+            usage_details={
+                "input": input_tokens,
+                "output": output_tokens,
+                "total": input_tokens + output_tokens,
+                "unit": "TOKENS" 
+            }
+
+        )
+        return answer
+
+@observe()
 def rerank_local(query, retrieved_docs, reranker_model, top_k=5):
 
     pairs = [(query, doc["text"]) for doc in retrieved_docs]

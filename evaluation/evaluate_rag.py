@@ -1,52 +1,100 @@
+"""
+RAG System Evaluation Module
+
+This module evaluates the performance of the RAG (Retrieval-Augmented Generation) pipeline
+using RAGAS metrics including faithfulness and answer relevancy.
+
+The evaluation process:
+1. Loads a test dataset of questions with ground truth answers
+2. For each question, retrieves documents from ChromaDB
+3. Reranks documents using a local reranker model
+4. Generates answers using Llama
+5. Evaluates answers using RAGAS metrics
+6. Saves results and checks against thresholds
+"""
+
 
 import json
 import numpy as np
 import pandas as pd
 import os, sys
+
+# Add parent directory to path for importing src modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# Disable RAGAS telemetry
 os.environ["RAGAS_DO_NOT_TRACK"] = "true"
-import weaviate
-from weaviate.classes.init import Auth
+
+# Import vector database libraries
+import chromadb
+from chromadb.config import Settings
+
+# Import ML models
 from sentence_transformers import SentenceTransformer, CrossEncoder
-from dotenv import load_dotenv
 
-from src.utils import hybrid_retrieve_documents, generate_answer_with_llama, rerank_local
+# Import utility functions from src
+from src.utils import retrieve_chroma, generate_answer_with_llama, rerank_local
 
+# Import RAGAS evaluation libraries
 from ragas.metrics import faithfulness, answer_relevancy
 from ragas import evaluate
 from datasets import Dataset
 
+# Import LangChain components for LLM integration
 from langchain_community.llms import Ollama
 from ragas.llms import LangchainLLMWrapper
 from ragas.run_config import RunConfig
-# from ragas.embeddings import HuggingFaceEmbeddings
 from langchain_community.embeddings import HuggingFaceEmbeddings
 
-
+# Load environment variables from .env file
+from dotenv import load_dotenv
 load_dotenv()
 
 
-weaviate_url = os.getenv("WEAVIATE_URL")
-weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+# ============================================
+# CONFIGURATION
+# ============================================
+# Database configuration
 COLLECTION_NAME = "ArxivPapers"
-FAITHFULNESS_THRESHOLD = 0.3
-RELEVANCY_THRESHOLD = 0.75
-USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
 
-# Create the config object instead of a dictionary
+# Evaluation thresholds
+FAITHFULNESS_THRESHOLD = 0.3      # Minimum faithfulness score required
+RELEVANCY_THRESHOLD = 0.75          # Minimum answer relevancy score required
+
+# LLM selection for evaluation
+USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"  # Use Groq cloud API if true
+
+# Path configuration
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+persist_dir = os.path.join(BASE_DIR, "chroma_db")
+
+# RAGAS evaluation configuration
+# Using sequential processing to avoid rate limits and ensure stability
 evaluation_config = RunConfig(
     max_workers=1, 
     timeout=180
 )
 
 # ============================================
+# DATABASE INITIALIZATION
+# ============================================
+
+# Initialize persistent ChromaDB client
+client = chromadb.PersistentClient(
+    path=persist_dir,
+    settings=Settings(
+        anonymized_telemetry=False  # Disable telemetry for privacy
+    )
+)
+
+# Get the collection containing ArXiv papers
+collection = client.get_or_create_collection(name=COLLECTION_NAME)
+
+# ============================================
 # SMART LLM SELECTION FOR EVALUATION
 # Automatically matches your main pipeline configuration
 # ============================================
  
-USE_GROQ = os.getenv("USE_GROQ", "false").lower() == "true"
-USE_HF_INFERENCE = os.getenv("USE_HF_INFERENCE", "false").lower() == "true"
-
 if USE_GROQ:
     # Cloud evaluation with Groq (more reliable, better structured output)
     print("🌩️  Using Groq for evaluation (cloud)")
@@ -88,14 +136,29 @@ else:
     print(f"      export OLLAMA_EVAL_MODEL=llama3.2")
 
 ragas_llm = LangchainLLMWrapper(judge_llm)
+
+# ============================================
+# MODEL INITIALIZATION
+# ============================================
+# Initialize reranker model for improving retrieval quality
+# BAAI/bge-reranker-large is a state-of-the-art reranking model
 reranker_model = CrossEncoder("BAAI/bge-reranker-large")
+
+# Initialize embedding model for RAGAS evaluation
 embedding_model = HuggingFaceEmbeddings(
     model_name="sentence-transformers/all-mpnet-base-v2"
 )
 
+# Initialize embedding model for document retrieval (same as main pipeline)
 model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
-# Load evaluation dataset
+
+# ============================================
+# LOAD EVALUATION DATASET
+# ============================================
+
+# Load test questions and ground truth answers
+# Dataset format: list of dictionaries with 'question' and 'ground_truth' fields
 with open("evaluation/evaluation_qa_dataset_5.json") as f:
     data = json.load(f)
 
@@ -104,55 +167,66 @@ df = pd.DataFrame(data)
 contexts_list = []
 answers_list = []
 
-# Connect to Weaviate
-with weaviate.connect_to_weaviate_cloud(
-    cluster_url=weaviate_url,
-    auth_credentials=Auth.api_key(weaviate_api_key),
-) as client:
+# ============================================
+# EVALUATION LOOP
+# Process each test question through the RAG pipeline
+# ============================================
 
-    collection = client.collections.get(COLLECTION_NAME)
+for question in df["question"]:
 
-    for question in df["question"]:
+    print("Evaluating:", question)
 
-        print("Evaluating:", question)
+    # Step 1: Retrieve relevant documents from ChromaDB
+    # Gets top 20 most similar documents based on embedding similarity
+    retrieved_docs = retrieve_chroma(
+        query=question,
+        collection=collection,
+        model=model,
+        top_k=20
+    )
 
-        retrieved_docs = hybrid_retrieve_documents(
-            query=question,
-            collection=collection,
-            model=model,
-            top_k=20
-        )
+    # Step 2: Rerank documents using local cross-encoder model
+    # Improves relevance by using a more sophisticated reranking model
+    # Returns top 5 most relevant documents
+    reranked_docs = rerank_local(
+                                    question,
+                                    retrieved_docs,
+                                    reranker_model,
+                                    top_k=5
+                                )
+    
+    # Step 3: Generate answer using Llama with reranked documents as context
+    answer = generate_answer_with_llama(
+        query=question,
+        reranked_docs=reranked_docs
+    )
 
-        # reranked_docs = rerank_with_cohere(question, retrieved_docs, top_k=5)
-        reranked_docs = rerank_local(
-                                        question,
-                                        retrieved_docs,
-                                        reranker_model,
-                                        top_k=5
-                                    )
+    # Extract text from reranked documents for evaluation
+    contexts = [doc.get("text", "") for doc in reranked_docs]
+    
+    # Store results
+    contexts_list.append(contexts)
+    answers_list.append(answer)
 
-        answer = generate_answer_with_llama(
-            query=question,
-            reranked_docs=reranked_docs
-        )
 
-        contexts = [doc.get("text", "") for doc in reranked_docs]
-
-        contexts_list.append(contexts)
-        answers_list.append(answer)
-
-# Add results to dataset
+# Add results to the dataframe
 df["contexts"] = contexts_list
 df["answer"] = answers_list
 
+# Convert to HuggingFace Dataset format for RAGAS
 dataset = Dataset.from_pandas(df)
+
+# ============================================
+# RUN RAGAS EVALUATION
+# ============================================
 
 # Run evaluation
 print("\n" + "="*60)
 print("Starting RAGAS Evaluation...")
 print("="*60 + "\n")
 
-# Run evaluation
+# Evaluate faithfulness metric
+# Faithfulness measures whether the generated answer is factually consistent with the retrieved context
 result = evaluate(
     dataset,
     metrics=[faithfulness],
@@ -161,18 +235,23 @@ result = evaluate(
     run_config=evaluation_config # Force sequential processing
 )
 
-print(f'result: {result}')
+print(f'Result: {result}')
 
+# Save evaluation results to CSV for analysis
 result_df = result.to_pandas()
 result_df.to_csv("rag_evaluation_results.csv", index=False)
 
+# Extract faithfulness scores
 faithfulness_score = result["faithfulness"]
-# relevancy_score = result["answer_relevancy"]
-print(f"Value: {faithfulness_score} | Type: {type(faithfulness_score)}")
 
+# Calculate average faithfulness score (ignoring NaN values)
 avg_score = np.nanmean(faithfulness_score)
 
 print(f"Average Faithfulness Score: {avg_score}")
+
+# ============================================
+# EVALUATION THRESHOLD CHECK
+# ============================================
 
 if avg_score < FAITHFULNESS_THRESHOLD:
     print("❌ Faithfulness below threshold")
@@ -181,8 +260,4 @@ if avg_score < FAITHFULNESS_THRESHOLD:
 else:
     print("✅ Faithfulness above threshold")
     print("✅ Evaluation passed")
-
-# if relevancy_score < RELEVANCY_THRESHOLD:
-#     print("❌ Answer relevancy below threshold")
-#     sys.exit(1)
 

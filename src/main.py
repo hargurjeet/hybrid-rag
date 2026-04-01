@@ -1,110 +1,133 @@
+"""
+ArXiv Paper hybrid RAG System
+
+This module implements a Retrieval-Augmented Generation (RAG) system for ArXiv papers.
+It uses ChromaDB for vector storage, SentenceTransformers for embeddings, Cohere for reranking,
+and Llama for answer generation.
+
+Dependencies:
+    - chromadb: Vector database for storing document embeddings
+    - sentence-transformers: For generating embeddings
+    - cohere: For reranking retrieved documents
+    - langfuse: For observability and tracing
+"""
+
 import os, sys
+
+# Add parent directory to path to enable imports from src module
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-import weaviate
-from weaviate.classes.init import Auth
-from weaviate.classes.config import Property, DataType
+
+# Import required libraries
+import chromadb
+from chromadb.config import Settings
+from chromadb.utils import embedding_functions
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
-from src.utils import load_arxiv_documents, chunk_documents, upload_chunks, retrieve_documents, hybrid_retrieve_documents, rerank_with_cohere, generate_answer_with_llama
+from src.utils import (
+    load_arxiv_documents, 
+    chunk_documents, 
+    upload_chunks_chroma, 
+    rerank_with_cohere, 
+    generate_answer_with_llama, 
+    retrieve_chroma
+)
 
+# Import Langfuse for observability and tracing
+from langfuse import observe
+from langfuse import get_client
+
+# Initialize Langfuse client for tracing
+langfuse_client = get_client()
+
+# Load environment variables from .env file
 load_dotenv()
 
+# Configuration
 file_path = "dataset/arxiv_10k.json"
 COLLECTION_NAME = "ArxivPapers"
 
+# Initialize embedding model for generating vector representations
 model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
-# Best practice: store your credentials in environment variables
-weaviate_url = os.getenv("WEAVIATE_URL")
-weaviate_api_key = os.getenv("WEAVIATE_API_KEY")
+# Set up base directory for persistent storage of Chroma DB
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 
-with weaviate.connect_to_weaviate_cloud(
-    cluster_url=weaviate_url,
-    auth_credentials=Auth.api_key(weaviate_api_key),
-) as client:
+# Set up base directory for persistent storage
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+persist_dir = os.path.join(BASE_DIR, "chroma_db")
 
-    print("Connection status:", client.is_ready())
+# Initialize persistent ChromaDB client
+# This creates or connects to a local database that persists across sessions
+client = chromadb.PersistentClient(
+    path=persist_dir,
+    settings=Settings(
+        anonymized_telemetry=False  # Optional
+    )
+)
 
-    collections = client.collections.list_all()
-    # -------------------
-    # INGESTION
-    # -------------------
+# Get or create the collection for storing ArXiv papers
+collection = client.get_or_create_collection(
+    name=COLLECTION_NAME
+)
 
-    if COLLECTION_NAME not in collections:
+# Print debug information about the collection
+print("Persist dir:", persist_dir)
+print("Collection count:", collection.count())
 
-        print("Collection not found. Creating collection and ingesting data...")
+# -------------------
+# INGESTION
+# -------------------
+if collection.count() == 0:
+    print("Collection empty. Ingesting data...")
 
-        client.collections.create(
-            name=COLLECTION_NAME,
-            properties=[
-                Property(name="paper_id", data_type=DataType.TEXT),
-                Property(name="title", data_type=DataType.TEXT),
-                Property(name="categories", data_type=DataType.TEXT),
-                Property(name="chunk_text", data_type=DataType.TEXT),
-            ],
-        )
+    docs = load_arxiv_documents(file_path)
+    chunks = chunk_documents(docs)
 
-        collection = client.collections.get(COLLECTION_NAME)
+    upload_chunks_chroma(chunks, collection, model)
 
-        docs = load_arxiv_documents(file_path)
-        print(f"Loaded documents: {len(docs)}")
-
-        chunks = chunk_documents(docs)
-        print(f"Chunked documents: {len(chunks)}")
-
-        upload_chunks(chunks, collection, model)
-
-        print("Ingestion complete.")
-
-    else:
-        print(f"Collection '{COLLECTION_NAME}' already exists. Skipping ingestion.")
-        
+    print("Ingestion complete.")
+else:
+    print("Collection already populated. Skipping ingestion.")
 
 
-    # Always get collection
-    collection = client.collections.get(COLLECTION_NAME)
+# -------------------
+# RETRIEVAL
+# -------------------
 
-    # -------------------
-    # RETRIEVAL
-    # -------------------
-    while True:
-        query = input("\nAsk something (or type exit): ")
+@observe() # Wraps the entire loop iteration as one trace
+def run_query(query, collection, model):
 
-        if query.lower() == "exit":
-            break
-
-        # results = retrieve_documents(query, collection, model, top_k=10)
-        retrieved_docs = hybrid_retrieve_documents(
-                                            query=query,
-                                            collection=collection,
-                                            model=model,
-                                            top_k=20
-                                            )
-        
-        reranked_docs = rerank_with_cohere(query, retrieved_docs, top_k=5)
-
-        print("\nFinal Reranked Results:\n")
-
-        for i, doc in enumerate(reranked_docs):
-            print(f"Rank {i+1}")
-            print("Paper ID:", doc["paper_id"])
-            print("Category:", doc["categories"])
-            print("Relevance Score:", doc["score"])
-            print("Text:", doc["text"][:300])
-            print("-" * 50)
-
-        answer = generate_answer_with_llama(
-                                            query=query,
-                                            reranked_docs=reranked_docs
-                                            )
-
-        print("\nFinal Answer:\n")
-        print(answer)
-        print("\nSources:\n")
-
-        for i, doc in enumerate(reranked_docs):
-
-            print(f"[Document {i+1}] arXiv:{doc['paper_id']}")
-
+    """
+    Execute a complete RAG query: retrieve, rerank, and generate answer.
     
+    Steps:
+    1. Retrieve top-k relevant documents from ChromaDB
+    2. Rerank documents using Cohere for better relevance
+    3. Generate answer using Llama with reranked documents as context
+    """
+
+    # 1. Retrieval (Will show as a nested span)
+    # retrieved_docs = hybrid_retrieve_documents(query, collection, model, top_k=20)
+    retrieved_docs = retrieve_chroma(query, collection, model, top_k=20)
+    
+    # 2. Reranking (Will show as a nested span)
+    # Note: If using Cohere, add @observe to rerank_with_cohere in utils.py
+    reranked_docs = rerank_with_cohere(query, retrieved_docs, top_k=5)
+
+    # 3. Generation (Will show as a 'Generation' span with token usage)
+    answer = generate_answer_with_llama(query, reranked_docs)
+    
+    return answer, reranked_docs
+
+# Interactive query loop
+while True:
+    query = input("\nAsk something (or type exit): ")
+
+    if query.lower() == "exit":
+        break
+    
+    answer, docs = run_query(query, collection, model)
+    print(answer)
+
+# Ensure all traces are sent to Langfuse before exiting
+langfuse_client.flush() 
