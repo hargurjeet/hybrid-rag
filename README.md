@@ -1,3 +1,16 @@
+---
+title: Hybrid Rag Hf
+emoji: 🚀
+colorFrom: red
+colorTo: red
+sdk: docker
+app_port: 8501
+tags:
+- streamlit
+pinned: false
+short_description: Streamlit template space
+---
+
 # 🧠 Production-Grade Hybrid RAG System
 
 > 🚀 A production-ready Retrieval-Augmented Generation (RAG) system with hybrid search, reranking, evaluation gating, and real-time observability.
@@ -237,15 +250,4 @@ If you found this useful or want to collaborate:
 
 If you like this project, consider giving it a ⭐ — it helps a lot! 
 
----
-title: Hybrid Rag Hf
-emoji: 🚀
-colorFrom: red
-colorTo: red
-sdk: docker
-app_port: 8501
-tags:
-- streamlit
-pinned: false
-short_description: Streamlit template space
----
+
