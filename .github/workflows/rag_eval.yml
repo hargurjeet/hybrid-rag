@@ -7,8 +7,8 @@ on:
     branches: [ main ]
     
 env:
-  WEAVIATE_URL: ${{ secrets.WEAVIATE_URL }}
-  WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
+  LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+  LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
   CO_API_KEY: ${{ secrets.CO_API_KEY }}
 jobs:
   rag-eval:
@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
+        with:
+          lfs: true  # Important for chroma_db files
 
       - name: Setup Python
         uses: actions/setup-python@v5
