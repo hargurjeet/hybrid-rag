@@ -236,3 +236,16 @@ If you found this useful or want to collaborate:
 ## ⭐ Star This Repo
 
 If you like this project, consider giving it a ⭐ — it helps a lot! 
+
+---
+title: Hybrid Rag Hf
+emoji: 🚀
+colorFrom: red
+colorTo: red
+sdk: docker
+app_port: 8501
+tags:
+- streamlit
+pinned: false
+short_description: Streamlit template space
+---
