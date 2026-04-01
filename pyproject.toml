@@ -25,6 +25,8 @@ dependencies = [
     "tqdm>=4.67.3",
     "weaviate-client>=4.20.4",
     "protobuf>=4.21.6",
+    "langfuse>=4.0.1",
+    "chromadb>=1.5.5",
 ]
 
 [tool.uv]
