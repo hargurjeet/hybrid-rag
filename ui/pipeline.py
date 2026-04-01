@@ -1,63 +1,77 @@
 import os, sys
+# Add parent directory to path for importing src modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import weaviate
-from weaviate.classes.init import Auth
+import chromadb
+from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
 
+# Import utility functions from src
 from src.utils import (
-    hybrid_retrieve_documents,
-    retrieve_documents,
-    rerank_with_cohere,
-    generate_answer_with_llama
+    retrieve_chroma,           # Vector retrieval from ChromaDB
+    retrieve_documents,        # Legacy retrieval function
+    rerank_with_cohere,        # Reranking using Cohere API
+    generate_answer_with_llama # Answer generation using Llama
 )
 
-from config import COLLECTION_NAME, WEAVIATE_URL, WEAVIATE_API_KEY
+from config import COLLECTION_NAME
 
 model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
+# ChromaDB persistence directory
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+PERSIST_DIR = os.path.join(BASE_DIR, "chroma_db")
 
-def get_weaviate_client():
-    return weaviate.connect_to_weaviate_cloud(
-        cluster_url=WEAVIATE_URL,
-        auth_credentials=Auth.api_key(WEAVIATE_API_KEY),
+def get_chroma_client():
+    """
+    Initialize and return a persistent ChromaDB client.
+    
+    Returns:
+        chromadb.PersistentClient: ChromaDB client instance
+    """
+    return chromadb.PersistentClient(
+        path=PERSIST_DIR,
+        settings=Settings(
+            anonymized_telemetry=False  # Disable telemetry for privacy
+        )
     )
+
 
 
 def run_pipeline(query, top_k=5, alpha=0.5, use_hybrid=True):
 
-    with get_weaviate_client() as client:
+    # Initialize ChromaDB client and get collection
+    client = get_chroma_client()
+    collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
-        collection = client.collections.get(COLLECTION_NAME)
-
-        # Retrieval
-        if use_hybrid:
-            retrieved_docs = hybrid_retrieve_documents(
-                query=query,
-                collection=collection,
-                model=model,
-                top_k=top_k * 4,
-                alpha=alpha
-            )
-        else:
-            retrieved_docs = retrieve_documents(
-                query=query,
-                collection=collection,
-                model=model,
-                top_k=top_k * 4
-            )
-
-        # Rerank
+    try:
+        # Step 1: Retrieve relevant documents from ChromaDB
+        # Currently only vector search is supported
+        # TODO: Implement hybrid search when ChromaDB supports it or add separate BM25 index
+        retrieved_docs = retrieve_chroma(
+            query=query,
+            collection=collection,
+            model=model,
+            top_k=top_k * 4  # Retrieve more docs before reranking
+        )
+        
+        # Step 2: Rerank documents using Cohere API
+        # This improves relevance by using a more sophisticated model
         reranked_docs = rerank_with_cohere(
             query,
             retrieved_docs,
             top_k=top_k
         )
-
-        # Answer
+        
+        # Step 3: Generate answer using Llama
+        # Uses reranked documents as context for better answers
         answer = generate_answer_with_llama(
             query=query,
             reranked_docs=reranked_docs
         )
-
+        
         return answer, reranked_docs
+        
+    except Exception as e:
+        print(f"Error in RAG pipeline: {e}")
+        raise
